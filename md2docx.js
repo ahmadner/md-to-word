@@ -4,8 +4,9 @@
 //   docx           the docx library namespace (window.docx in the browser)
 //   title          title to use when the Markdown has no single "# Title"
 //   renderDiagram  async (mermaidCode) => { data: Uint8Array (PNG), width, height } in CSS pixels
+//   theme          element colors and fonts from theme.js resolveTheme(); defaults to the Navy theme
 
-// ---------- Theme ----------
+// ---------- Default theme (Navy) ----------
 const NAVY = '1F3864';
 const ACCENT = '2E5C9A';
 const TEXT = '262626';
@@ -172,13 +173,26 @@ export function parseInline(s, st = {}) {
 
 export const plain = (s) => parseInline(s).map((x) => x.text).join('');
 
-export async function markdownToDocx(markdown, { docx, title: fallbackTitle, renderDiagram }) {
+export async function markdownToDocx(markdown, { docx, title: fallbackTitle, renderDiagram, theme = {} }) {
   const {
     Document, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, ShadingType,
     BorderStyle, AlignmentType, HeadingLevel, TableOfContents, Header, Footer, PageNumber,
     ImageRun, ExternalHyperlink, InternalHyperlink, Bookmark, LevelFormat, TableLayoutType,
     VerticalAlign, TabStopType, Tab,
   } = docx;
+  // Theme colors arrive as #rrggbb; Word wants RRGGBB.
+  const hex = (v, fallback) => (typeof v === 'string' && /^#?[0-9a-f]{6}$/i.test(v) ? v.replace('#', '').toUpperCase() : fallback);
+  const T = {
+    page: hex(theme.page, 'FFFFFF'), text: hex(theme.text, TEXT), muted: hex(theme.muted, MUTED), link: hex(theme.link, LINK),
+    title: hex(theme.title, NAVY), kicker: hex(theme.kicker, ACCENT), subtitle: hex(theme.subtitle, MUTED),
+    h1: hex(theme.h1, NAVY), h1Rule: hex(theme.h1Rule, ACCENT), h2: hex(theme.h2, NAVY), h3: hex(theme.h3, ACCENT), h4: hex(theme.h4, '374151'),
+    th: hex(theme.tableHeader, NAVY), thText: hex(theme.tableHeaderText, 'FFFFFF'), band: hex(theme.tableBand, BAND),
+    rule: hex(theme.tableBorder, RULE), key: hex(theme.keyFill, KEY_FILL),
+    noteBar: hex(theme.noteBar, ACCENT), noteFill: hex(theme.noteFill, 'F3F6FA'),
+    codeFill: hex(theme.codeFill, CODE_FILL), codeBorder: hex(theme.codeBorder, CODE_BORDER),
+    codeText: hex(theme.codeText, '1F2328'), inlineCode: hex(theme.inlineCodeFill, INLINE_CODE_FILL),
+    fontHeading: theme.fontHeading || FONT, fontBody: theme.fontBody || FONT,
+  };
   const md = markdown.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
   const blocks = parseBlocks(md.split('\n'));
   const notes = [];
@@ -225,9 +239,9 @@ export async function markdownToDocx(markdown, { docx, title: fallbackTitle, ren
         strike: sg.strike || undefined,
         font: sg.code ? MONO : base.font,
         size: sg.code && !base.heading ? (base.size || 21) - 2 : base.size,
-        color: sg.link ? LINK : base.color,
+        color: sg.link ? T.link : base.color,
         underline: sg.link ? {} : undefined,
-        shading: sg.code && !base.noCodeFill ? { type: ShadingType.CLEAR, fill: INLINE_CODE_FILL, color: 'auto' } : undefined,
+        shading: sg.code && !base.noCodeFill ? { type: ShadingType.CLEAR, fill: T.inlineCode, color: 'auto' } : undefined,
       });
       if (!seg.link) { out.push(mk(seg)); k++; continue; }
       const group = [];
@@ -244,7 +258,7 @@ export async function markdownToDocx(markdown, { docx, title: fallbackTitle, ren
   }
 
   // ---------- Tables ----------
-  const border = (color = RULE, size = 4) => ({ style: BorderStyle.SINGLE, size, color });
+  const border = (color = T.rule, size = 4) => ({ style: BorderStyle.SINGLE, size, color });
   const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: 'auto' };
   const cellBorders = { top: border(), bottom: border(), left: border(), right: border() };
 
@@ -307,12 +321,12 @@ export async function markdownToDocx(markdown, { docx, title: fallbackTitle, ren
     const headerRow = new TableRow({
       tableHeader: true,
       cantSplit: true,
-      children: b.header.map((t, c) => cell(t, c, { fill: NAVY, color: 'FFFFFF', bold: true, header: true })),
+      children: b.header.map((t, c) => cell(t, c, { fill: T.th, color: T.thText, bold: true, header: true })),
     });
     const bodyRows = b.rows.map((r, ri) => new TableRow({
       cantSplit: true,
       children: b.header.map((_, c) => cell(r[c] || '', c, {
-        fill: keyCol && c === 0 ? KEY_FILL : ri % 2 === 1 ? BAND : undefined,
+        fill: keyCol && c === 0 ? T.key : ri % 2 === 1 ? T.band : undefined,
         bold: keyCol && c === 0 ? true : undefined,
       })),
     }));
@@ -350,11 +364,11 @@ export async function markdownToDocx(markdown, { docx, title: fallbackTitle, ren
     if (!lines.length) lines = [''];
     const paras = lines.map((ln) => new Paragraph({
       spacing: { before: 0, after: 0, line: 240 },
-      children: [new TextRun({ text: ln.length ? ln : ' ', font: MONO, size: 17, color: '1F2328' })],
+      children: [new TextRun({ text: ln.length ? ln : ' ', font: MONO, size: 17, color: T.codeText })],
     }));
     return box(paras, {
-      fill: CODE_FILL,
-      borders: { top: border(CODE_BORDER), bottom: border(CODE_BORDER), left: border(CODE_BORDER), right: border(CODE_BORDER) },
+      fill: T.codeFill,
+      borders: { top: border(T.codeBorder), bottom: border(T.codeBorder), left: border(T.codeBorder), right: border(T.codeBorder) },
       margins: { top: 100, bottom: 100, left: 160, right: 160 },
       cantSplit: lines.length <= 45,
       total,
@@ -414,8 +428,8 @@ export async function markdownToDocx(markdown, { docx, title: fallbackTitle, ren
     }
     if (!children.length) children.push(new Paragraph({ children: [] }));
     return box(children, {
-      fill: 'F3F6FA',
-      borders: { left: { style: BorderStyle.SINGLE, size: 24, color: ACCENT }, top: NO_BORDER, bottom: NO_BORDER, right: NO_BORDER },
+      fill: T.noteFill,
+      borders: { left: { style: BorderStyle.SINGLE, size: 24, color: T.noteBar }, top: NO_BORDER, bottom: NO_BORDER, right: NO_BORDER },
       margins: { top: 140, bottom: 120, left: 220, right: 200 },
       cantSplit: true,
       total,
@@ -444,12 +458,12 @@ export async function markdownToDocx(markdown, { docx, title: fallbackTitle, ren
 
   const cover = [];
   if (titleBlock) {
-    if (kicker) cover.push(new Paragraph({ spacing: { before: 2600, after: 120 }, children: [new TextRun({ text: kicker.toUpperCase(), bold: true, color: ACCENT, size: 26, characterSpacing: 40 })] }));
-    cover.push(new Paragraph({ spacing: { before: kicker ? 0 : 2600, after: 160 }, children: [new TextRun({ text: mainTitle, bold: true, color: NAVY, size: 60 })] }));
+    if (kicker) cover.push(new Paragraph({ spacing: { before: 2600, after: 120 }, children: [new TextRun({ text: kicker.toUpperCase(), bold: true, color: T.kicker, size: 26, characterSpacing: 40, font: T.fontHeading })] }));
+    cover.push(new Paragraph({ spacing: { before: kicker ? 0 : 2600, after: 160 }, children: [new TextRun({ text: mainTitle, bold: true, color: T.title, size: 60, font: T.fontHeading })] }));
     cover.push(new Paragraph({
       spacing: { before: 0, after: 600 },
-      border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: ACCENT, space: 12 } },
-      children: subtitle ? [new TextRun({ text: subtitle, color: MUTED, size: 28 })] : [],
+      border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: T.h1Rule, space: 12 } },
+      children: subtitle ? [new TextRun({ text: subtitle, color: T.subtitle, size: 28 })] : [],
     }));
     if (metaBlock) cover.push(buildTable(metaBlock));
   }
@@ -484,8 +498,8 @@ export async function markdownToDocx(markdown, { docx, title: fallbackTitle, ren
       body.push(new Paragraph({
         pageBreakBefore: takeBreak(body.length > 0),
         spacing: { before: 0, after: 240 },
-        border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: ACCENT, space: 4 } },
-        children: [new TextRun({ text: plain(b.text), bold: true, color: NAVY, size: 32 })],
+        border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: T.h1Rule, space: 4 } },
+        children: [new TextRun({ text: plain(b.text), bold: true, color: T.h1, size: 32, font: T.fontHeading })],
       }));
       body.push(new TableOfContents('Contents', { hyperlink: true, headingStyleRange: '1-3' }));
       continue;
@@ -529,13 +543,13 @@ export async function markdownToDocx(markdown, { docx, title: fallbackTitle, ren
   if (!body.length && !cover.length) body.push(new Paragraph({ children: [] }));
 
   // ---------- Header / footer ----------
-  const small = { size: 16, color: MUTED };
+  const small = { size: 16, color: T.muted };
   const headerRight = [version && `Version ${version}`, date].filter(Boolean).join('  ·  ');
   const footerLeft = handedBy && handedTo ? `${handedBy} → ${handedTo}` : author;
   const header = new Header({
     children: [new Paragraph({
       tabStops: [{ type: TabStopType.RIGHT, position: CONTENT_W }],
-      border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: RULE, space: 4 } },
+      border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: T.rule, space: 4 } },
       children: [
         new TextRun({ text: kicker ? `${kicker} – ${mainTitle}` : mainTitle, ...small }),
         new TextRun({ children: [new Tab(), headerRight], ...small }),
@@ -545,7 +559,7 @@ export async function markdownToDocx(markdown, { docx, title: fallbackTitle, ren
   const footer = new Footer({
     children: [new Paragraph({
       tabStops: [{ type: TabStopType.RIGHT, position: CONTENT_W }],
-      border: { top: { style: BorderStyle.SINGLE, size: 4, color: RULE, space: 4 } },
+      border: { top: { style: BorderStyle.SINGLE, size: 4, color: T.rule, space: 4 } },
       children: [
         new TextRun({ text: footerLeft, ...small }),
         new TextRun({ children: [new Tab(), 'Page ', PageNumber.CURRENT, ' of ', PageNumber.TOTAL_PAGES], ...small }),
@@ -557,28 +571,29 @@ export async function markdownToDocx(markdown, { docx, title: fallbackTitle, ren
   // ---------- Document ----------
   const heading = (id, name, size, color, before, after, outlineLevel, extra = {}) => ({
     id, name, basedOn: 'Normal', next: 'Normal', quickFormat: true,
-    run: { font: FONT, size, bold: true, color },
+    run: { font: T.fontHeading, size, bold: true, color },
     paragraph: { spacing: { before, after }, keepNext: true, keepLines: true, outlineLevel, ...extra },
   });
 
   const doc = new Document({
+    background: T.page !== 'FFFFFF' ? { color: T.page } : undefined,
     creator: author || undefined,
     title: titleText,
     subject: subtitle || undefined,
     description: version ? `Version ${version}` : undefined,
     styles: {
       default: {
-        document: { run: { font: FONT, size: 21, color: TEXT }, paragraph: { spacing: { after: 140, line: 276 } } },
-        hyperlink: { run: { color: LINK, underline: { type: 'single', color: LINK } } },
+        document: { run: { font: T.fontBody, size: 21, color: T.text }, paragraph: { spacing: { after: 140, line: 276 } } },
+        hyperlink: { run: { color: T.link, underline: { type: 'single', color: T.link } } },
       },
       paragraphStyles: [
-        heading('Heading1', 'Heading 1', 32, NAVY, 0, 240, 0, { border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: ACCENT, space: 4 } } }),
-        heading('Heading2', 'Heading 2', 26, NAVY, 300, 120, 1),
-        heading('Heading3', 'Heading 3', 22, ACCENT, 240, 100, 2),
-        heading('Heading4', 'Heading 4', 21, '374151', 200, 80, 3),
-        { id: 'TOC1', name: 'toc 1', basedOn: 'Normal', next: 'Normal', run: { bold: true, color: NAVY }, paragraph: { spacing: { before: 110, after: 20, line: 240 }, tabStops: [{ type: TabStopType.RIGHT, position: CONTENT_W, leader: 'dot' }] } },
+        heading('Heading1', 'Heading 1', 32, T.h1, 0, 240, 0, { border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: T.h1Rule, space: 4 } } }),
+        heading('Heading2', 'Heading 2', 26, T.h2, 300, 120, 1),
+        heading('Heading3', 'Heading 3', 22, T.h3, 240, 100, 2),
+        heading('Heading4', 'Heading 4', 21, T.h4, 200, 80, 3),
+        { id: 'TOC1', name: 'toc 1', basedOn: 'Normal', next: 'Normal', run: { bold: true, color: T.h1 }, paragraph: { spacing: { before: 110, after: 20, line: 240 }, tabStops: [{ type: TabStopType.RIGHT, position: CONTENT_W, leader: 'dot' }] } },
         { id: 'TOC2', name: 'toc 2', basedOn: 'Normal', next: 'Normal', paragraph: { indent: { left: 280 }, spacing: { before: 0, after: 10, line: 240 }, tabStops: [{ type: TabStopType.RIGHT, position: CONTENT_W, leader: 'dot' }] } },
-        { id: 'TOC3', name: 'toc 3', basedOn: 'Normal', next: 'Normal', run: { size: 19, color: '4B5563' }, paragraph: { indent: { left: 560 }, spacing: { before: 0, after: 0, line: 240 }, tabStops: [{ type: TabStopType.RIGHT, position: CONTENT_W, leader: 'dot' }] } },
+        { id: 'TOC3', name: 'toc 3', basedOn: 'Normal', next: 'Normal', run: { size: 19, color: T.muted }, paragraph: { indent: { left: 560 }, spacing: { before: 0, after: 0, line: 240 }, tabStops: [{ type: TabStopType.RIGHT, position: CONTENT_W, leader: 'dot' }] } },
       ],
     },
     numbering: {

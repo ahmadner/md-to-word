@@ -1,11 +1,14 @@
 // Markdown workspace: open a file, edit it with a live preview, export it as Word, Markdown, HTML or PDF.
 import { markdownToDocx } from './md2docx.js';
 import { renderPreview } from './preview.js';
-import { diagramSvg, readySvg, diagramPng } from './diagrams.js';
+import { diagramSvg, readySvg, diagramPng, setDiagramTheme } from './diagrams.js';
+import { DEFAULT_PRESET, presetTheme, normalizeTheme, resolveTheme, themeStyle, mermaidVariables } from './theme.js';
+import { initThemePanel } from './theme-panel.js';
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const DRAFT_KEY = 'md-to-word.draft';
 const PREFS_KEY = 'md-to-word.prefs';
+const THEME_KEY = 'md-to-word.theme';
 const NARROW = matchMedia('(max-width: 859px)');
 
 const $ = (id) => document.getElementById(id);
@@ -24,7 +27,7 @@ const store = {
   get(key) { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } },
   set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; } },
 };
-const prefs = { view: 'split', outline: false, ...store.get(PREFS_KEY) };
+const prefs = { view: 'split', outline: false, appearance: 'system', ...store.get(PREFS_KEY) };
 
 function download(blob, name) {
   const url = URL.createObjectURL(blob);
@@ -78,6 +81,7 @@ const ICONS = {
   codeblock: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m10 9-3 3 3 3"/><path d="m14 15 3-3-3-3"/>',
   table: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/>',
   diagram: '<rect x="3" y="3" width="8" height="8" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect x="13" y="13" width="8" height="8" rx="2"/>',
+  palette: '<path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.12a1.64 1.64 0 0 1 1.67-1.67h2C19.48 16.39 22 13.89 22 10.84 21.97 6.01 17.46 2 12 2z"/><circle cx="7.5" cy="11.5" r="1"/><circle cx="10.5" cy="7.5" r="1"/><circle cx="15.5" cy="7.5" r="1"/>',
 };
 for (const el of document.querySelectorAll('[data-icon]')) {
   el.insertAdjacentHTML('afterbegin', `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[el.dataset.icon]}</svg>`);
@@ -432,7 +436,7 @@ const exporters = {
     try {
       const docx = await loadDocx();
       const name = `${state.name}.docx`;
-      const { doc, notes, hasToc } = await markdownToDocx(editor.value, { docx, title: state.name, renderDiagram: diagramPng });
+      const { doc, notes, hasToc } = await markdownToDocx(editor.value, { docx, title: state.name, renderDiagram: diagramPng, theme: themeTokens });
       const blob = await docx.Packer.toBlob(doc);
       download(blob, name);
       const tips = [...notes];
@@ -453,8 +457,8 @@ const exporters = {
       await updatePreview(); // diagrams finished drawing
       const css = await (await fetch('preview.css')).text();
       const page = `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n` +
-        `<title>${esc(state.title || state.name)}</title>\n<style>\nbody { margin: 0; background: #fff; }\n${css}</style>\n</head>\n<body>\n` +
-        `<article class="doc">\n${preview.innerHTML}\n</article>\n</body>\n</html>\n`;
+        `<title>${esc(state.title || state.name)}</title>\n<style>\nbody { margin: 0; background: ${themeTokens.page}; }\n${css}</style>\n</head>\n<body>\n` +
+        `<article class="doc" style="${esc(themeStyle(themeTokens))}">\n${preview.innerHTML}\n</article>\n</body>\n</html>\n`;
       download(new Blob([page], { type: 'text/html;charset=utf-8' }), `${state.name}.html`);
       toast('ok', `Saved <strong>${esc(state.name)}.html</strong>`, 4000);
     } catch (e) {
@@ -495,6 +499,30 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !menu.hidden) { toggleMenu(false); menuBtn.focus(); }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && !$('workspace').hidden) { e.preventDefault(); exporters.md(); }
 });
+
+// ---------- Theme ----------
+// One theme drives the preview, the HTML export, the diagrams and the Word export.
+let theme = (() => { try { return normalizeTheme(store.get(THEME_KEY)); } catch { return presetTheme(DEFAULT_PRESET); } })();
+let themeTokens = resolveTheme(theme);
+
+function applyTheme(next, save = true) {
+  theme = next;
+  themeTokens = resolveTheme(theme);
+  preview.setAttribute('style', themeStyle(themeTokens));
+  setDiagramTheme(mermaidVariables(themeTokens));
+  if (save) store.set(THEME_KEY, theme);
+  if (!$('workspace').hidden && state.diagrams) schedulePreview(); // redraw diagrams in the new colors
+}
+applyTheme(theme, false);
+
+function setAppearance(value) {
+  if (value === 'light' || value === 'dark') document.documentElement.dataset.appearance = value;
+  else delete document.documentElement.dataset.appearance;
+  prefs.appearance = value;
+  store.set(PREFS_KEY, prefs);
+}
+
+initThemePanel({ getTheme: () => theme, setTheme: applyTheme, setAppearance, notify: (kind, html) => toast(kind, html), download });
 
 // ---------- Workspace buttons and history ----------
 $('openBtn').addEventListener('click', () => $('openFile').click());

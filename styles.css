@@ -5,8 +5,16 @@
   --editor-bg: #ffffff; --paper-bg: #e9edf2; --hover: #eef1f5;
   color-scheme: light;
 }
+/* Dark app colors: chosen in the Theme panel, or following the system when set to System. */
+:root[data-appearance="dark"] {
+  --bg: #12161c; --surface: #1b2129; --text: #e5e7eb; --muted: #9aa3af; --line: #313a46;
+  --accent: #6f9be0; --accent-hover: #8fb2ea; --accent-soft: #1f2a3a; --on-accent: #0f1520;
+  --ok: #6fcf97; --ok-soft: #16281e; --err: #f28b82; --err-soft: #2c1a1a;
+  --editor-bg: #161b22; --paper-bg: #0d1117; --hover: #232b36;
+  color-scheme: dark;
+}
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-appearance="light"]) {
     --bg: #12161c; --surface: #1b2129; --text: #e5e7eb; --muted: #9aa3af; --line: #313a46;
     --accent: #6f9be0; --accent-hover: #8fb2ea; --accent-soft: #1f2a3a; --on-accent: #0f1520;
     --ok: #6fcf97; --ok-soft: #16281e; --err: #f28b82; --err-soft: #2c1a1a;
@@ -118,11 +126,53 @@ code { font-family: Consolas, "Cascadia Mono", Menlo, monospace; }
 .statusbar { display: flex; gap: 16px; justify-content: space-between; padding: 4px 12px; background: var(--surface); border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
 .workspace.dragging .panes { outline: 3px dashed var(--accent); outline-offset: -6px; }
 
+/* ---------- Theme panel ---------- */
+.theme-panel {
+  position: absolute; top: 0; right: 0; bottom: 0; z-index: 15; width: 340px; display: flex; flex-direction: column;
+  background: var(--surface); border-left: 1px solid var(--line); box-shadow: -8px 0 24px rgba(0, 0, 0, .14);
+}
+.tp-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.tp-close { width: 28px; height: 28px; border: 0; border-radius: 6px; background: none; cursor: pointer; font-size: 20px; line-height: 1; }
+.tp-close:hover { background: var(--hover); }
+.tp-body { flex: 1; overflow: auto; padding: 4px 14px 14px; }
+.tp-body section, .tp-body details { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.tp-body h3 { margin: 0 0 10px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.tp-body .hint { font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: 4px; }
+.tp-note { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+.presets { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.preset { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: none; cursor: pointer; font-size: 13px; text-align: left; }
+.preset:hover { border-color: var(--accent); }
+.preset[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.swatch { display: flex; width: 34px; height: 18px; flex: none; border-radius: 4px; overflow: hidden; border: 1px solid rgba(127, 127, 127, .35); }
+.swatch i:nth-child(1) { flex: 6; } .swatch i:nth-child(2) { flex: 3; } .swatch i:nth-child(3) { flex: 1; }
+.ratio { display: flex; height: 26px; margin-bottom: 10px; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); font-size: 11px; font-weight: 700; }
+.ratio span { display: grid; place-items: center; }
+.ratio span:nth-child(1) { flex: 6; } .ratio span:nth-child(2) { flex: 3; } .ratio span:nth-child(3) { flex: 1; }
+.color-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; cursor: pointer; }
+.color-row span { display: flex; flex-direction: column; line-height: 1.3; }
+.color-row strong { font-size: 13px; }
+.color-row small { font-size: 12px; color: var(--muted); }
+input[type="color"] { width: 36px; height: 28px; flex: none; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); cursor: pointer; }
+.select-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0; font-size: 13px; }
+.select-row select { width: 170px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
+.elements summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+.el-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; }
+.el-row input[type="color"] { width: 30px; height: 24px; }
+.el-label { flex: 1; }
+.el-row.own .el-label { font-weight: 600; }
+.el-warn { color: var(--err); font-size: 11px; white-space: nowrap; }
+.el-reset { padding: 2px 8px; border: 1px solid var(--line); border-radius: 5px; background: none; cursor: pointer; font-size: 12px; }
+.el-reset:hover { background: var(--hover); }
+.tp-body .appearance { margin-top: 2px; }
+.tp-foot { display: flex; gap: 6px; padding: 10px 14px; border-top: 1px solid var(--line); }
+.tp-foot .btn { flex: 1; justify-content: center; }
+
 /* ---------- Toast ---------- */
 .toast {
   position: fixed; right: 16px; bottom: 40px; z-index: 30; width: min(420px, 100% - 32px); padding: 12px 36px 12px 14px;
   border-radius: 8px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
 }
+.theme-open .toast { right: 356px; }
 .toast.ok { background: var(--ok-soft); color: var(--ok); }
 .toast.err { background: var(--err-soft); color: var(--err); }
 .toast ul { margin: 8px 0 0; padding-left: 18px; color: var(--text); font-size: 13px; }
@@ -140,6 +190,8 @@ code { font-family: Consolas, "Cascadia Mono", Menlo, monospace; }
   .spacer { display: none; }
   .btn .label { display: none; }
   .outline { position: absolute; inset: 0 auto 0 0; z-index: 10; box-shadow: 4px 0 16px rgba(0, 0, 0, .2); }
+  .theme-panel { width: 100%; border-left: 0; }
+  .theme-open .toast { right: 16px; bottom: 76px; }
   .preview-pane { padding: 12px; }
   .statusbar #message { display: none; }
 }
@@ -147,7 +199,7 @@ code { font-family: Consolas, "Cascadia Mono", Menlo, monospace; }
 /* ---------- Print: only the document ---------- */
 @media print {
   body { background: #fff; }
-  .start, .topbar, .toolbar, .statusbar, .outline, .editor-pane, .toast { display: none !important; }
+  .start, .topbar, .toolbar, .statusbar, .outline, .editor-pane, .toast, .theme-panel { display: none !important; }
   .workspace { position: static; display: block; background: none; }
   .panes { display: block; }
   .panes .preview-pane { display: block !important; overflow: visible; padding: 0; background: none; }

@@ -6,6 +6,10 @@
 <title>Markdown to Word</title>
 <meta name="description" content="Open, edit and preview Markdown files, then export them as Word, HTML, PDF or Markdown. Runs entirely in your browser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231f3864' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/%3E%3Cpath d='M14 3v5h5'/%3E%3Cpath d='M9 13h6M9 17h4'/%3E%3C/svg%3E">
+<script>
+  // Apply the saved light/dark choice before the page draws, so it does not flash.
+  try { var a = (JSON.parse(localStorage.getItem('md-to-word.prefs')) || {}).appearance; if (a === 'light' || a === 'dark') document.documentElement.dataset.appearance = a; } catch (e) {}
+</script>
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="preview.css">
 </head>
@@ -39,6 +43,7 @@
     <li>Edit with a live preview that matches the Word layout, a formatting toolbar and an outline.</li>
     <li>A single <code># Title</code> and a two-column table under it become the cover page; <code>## Contents</code> becomes a table of contents.</li>
     <li><code>mermaid</code> code blocks become diagrams; tables, lists, code and notes are styled.</li>
+    <li>Pick a theme or your own 60-30-10 colors and fonts; they apply to the preview and every export.</li>
     <li>Your latest changes are kept as a draft in this browser.</li>
   </ul>
 
@@ -62,6 +67,7 @@
     <button class="btn" id="openBtn" type="button" data-icon="open" title="Open a Markdown file"><span class="label">Open</span></button>
     <input type="file" id="openFile" accept=".md,.markdown,.txt,text/markdown" hidden>
     <button class="btn" id="newBtn" type="button" data-icon="new" title="Start a blank document"><span class="label">New</span></button>
+    <button class="btn" id="themeBtn" type="button" data-icon="palette" aria-expanded="false" aria-controls="themePanel" title="Theme: colors and fonts"><span class="label">Theme</span></button>
     <div class="menu-wrap">
       <button class="btn primary" id="exportBtn" type="button" data-icon="download" aria-haspopup="menu" aria-expanded="false"><span class="label">Export</span></button>
       <div class="menu" id="exportMenu" role="menu" hidden>
@@ -103,6 +109,55 @@
     <section class="pane preview-pane" id="previewPane" aria-label="Preview">
       <article class="doc" id="preview"></article>
     </section>
+
+    <aside class="theme-panel" id="themePanel" aria-label="Theme" hidden>
+      <div class="tp-head">
+        <strong>Theme</strong>
+        <button type="button" class="tp-close" id="themeClose" aria-label="Close theme panel">×</button>
+      </div>
+      <div class="tp-body">
+        <section>
+          <h3>Presets</h3>
+          <div class="presets" id="presets"></div>
+        </section>
+
+        <section>
+          <h3>Colors <span class="hint">60 · 30 · 10 rule</span></h3>
+          <div class="ratio" id="ratio" aria-hidden="true"><span>60%</span><span>30%</span><span></span></div>
+          <label class="color-row"><input type="color" data-palette="dominant"><span><strong>Dominant · 60%</strong><small>Page background</small></span></label>
+          <label class="color-row"><input type="color" data-palette="secondary"><span><strong>Secondary · 30%</strong><small>Title, headings, table headers, diagrams</small></span></label>
+          <label class="color-row"><input type="color" data-palette="accent"><span><strong>Accent · 10%</strong><small>Links, heading rules, note bars, highlights</small></span></label>
+        </section>
+
+        <section>
+          <h3>Fonts</h3>
+          <label class="select-row"><span>Headings</span><select data-font="heading"></select></label>
+          <label class="select-row"><span>Body text</span><select data-font="body"></select></label>
+          <p class="tp-note">Word uses these fonts only if they are installed on the computer that opens the document.</p>
+        </section>
+
+        <details class="elements">
+          <summary>Fine-tune element colors</summary>
+          <p class="tp-note">Each element starts with a color worked out from the palette. Pick a color to set your own; <strong>Auto</strong> goes back.</p>
+          <div id="elementRows"></div>
+        </details>
+
+        <section>
+          <h3>App appearance</h3>
+          <div class="seg appearance" role="group" aria-label="App appearance">
+            <button type="button" data-appearance="system" aria-pressed="true">System</button>
+            <button type="button" data-appearance="light" aria-pressed="false">Light</button>
+            <button type="button" data-appearance="dark" aria-pressed="false">Dark</button>
+          </div>
+        </section>
+      </div>
+      <div class="tp-foot">
+        <button type="button" class="btn" id="themeReset" title="Back to the preset's colors and fonts">Reset</button>
+        <button type="button" class="btn" id="themeExport" title="Save this theme as a .json file">Export</button>
+        <button type="button" class="btn" id="themeImport" title="Load a theme .json file">Import</button>
+        <input type="file" id="themeFile" accept=".json,application/json" hidden>
+      </div>
+    </aside>
   </div>
 
   <footer class="statusbar"><span id="stats"></span><span id="message">Drop a file anywhere to open it</span></footer>
