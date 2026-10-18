@@ -116,16 +116,5 @@ export function initThemePanel({ getTheme, setTheme, setAppearance, notify, down
     if (b) { setAppearance(b.dataset.appearance); render(); }
   });
 
-  // Open and close
-  const toggle = (open = panel.hidden) => {
-    panel.hidden = !open;
-    document.body.classList.toggle('theme-open', open); // messages move clear of the panel
-    $('themeBtn').setAttribute('aria-expanded', String(open));
-    if (open) { render(); panel.querySelector('.preset[aria-pressed="true"], .preset').focus(); }
-  };
-  $('themeBtn').addEventListener('click', () => toggle());
-  $('themeClose').addEventListener('click', () => { toggle(false); $('themeBtn').focus(); });
-  panel.addEventListener('keydown', (e) => { if (e.key === 'Escape') { toggle(false); $('themeBtn').focus(); } });
-
-  return { render, toggle };
+  return { render };
 }

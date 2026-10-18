@@ -63,6 +63,10 @@
 .doc .callout { margin: 4px 0 18px; padding: 12px 16px; background: var(--note-fill); border-left: 4px solid var(--note-bar); }
 .doc .callout > :last-child { margin-bottom: 0; }
 .doc .callout .table-wrap { margin-bottom: 4px; }
+.doc img { max-width: 100%; height: auto; vertical-align: middle; }
+.doc .figure { margin: 12px 0 20px; text-align: center; }
+.doc .figure figcaption { margin-top: 6px; color: var(--muted); font-style: italic; font-size: 13.5px; }
+.doc .img-missing { display: inline-block; padding: 6px 10px; border: 1px dashed #b42318; border-radius: 4px; color: #b42318; font-size: 13px; }
 .doc .diagram { margin: 12px 0 20px; text-align: center; }
 .doc .diagram svg { max-width: 100%; height: auto; }
 .doc .diagram .pending { color: var(--muted); font-size: 13px; padding: 24px; border: 1px dashed var(--rule); }

@@ -6,10 +6,24 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 const safeHref = (href) => (/^(https?:|mailto:|#)/i.test(href) ? href : null);
 const baseSlug = (t) => plain(t).trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/\s/g, '-');
 const isContents = (b) => b.type === 'heading' && /^(table of )?contents$/i.test(plain(b.text).trim());
+const safeImageSrc = (src) => (/^(blob:|https?:|data:image\/)/i.test(src) ? src : null);
+
+// Set by renderPreview: src -> { url, docWidth, path } or null when the image is missing.
+let imageInfo = () => null;
+
+function imageTag(s) {
+  const info = imageInfo(s.src);
+  const url = info && safeImageSrc(info.url);
+  if (!url) return `<span class="img-missing" title="${esc(s.src)}">Image not found: ${esc(s.src)}</span>`;
+  const width = info.docWidth && info.docWidth !== 'auto' ? ` style="width:${Number(info.docWidth)}%"`
+    : info.width ? ` width="${Number(info.width)}"` : '';
+  return `<img src="${esc(url)}" alt="${esc(s.alt)}"${s.title ? ` title="${esc(s.title)}"` : ''}${info.path ? ` data-path="${esc(info.path)}"` : ''}${width}>`;
+}
 
 function inline(text) {
   return parseInline(text).map((s) => {
     if (s.br) return '<br>';
+    if (s.image) return imageTag(s);
     let h = esc(s.text);
     if (s.code) h = `<code>${h}</code>`;
     if (s.bold) h = `<strong>${h}</strong>`;
@@ -57,10 +71,12 @@ const codeBlock = (lines) => `<pre class="code"><code>${esc(lines.join('\n'))}</
 
 /**
  * Renders Markdown to preview HTML.
- * Returns { html, headings: [{ id, text, level, line }], diagrams: [mermaid source], title }.
+ * Returns { html, headings: [{ id, text, level, line }], diagrams: [mermaid source], images: [src], title }.
  * Each diagram is an empty <figure class="diagram" data-diagram="i"> for the caller to fill.
+ * `image(src)` gives { url, docWidth, path } for an image, or null when it is missing.
  */
-export function renderPreview(markdown) {
+export function renderPreview(markdown, { image = () => null } = {}) {
+  imageInfo = image;
   const md = markdown.replace(/^﻿/, '').replace(/\r\n?/g, '\n');
   const blocks = parseBlocks(md.split('\n'));
 
@@ -95,7 +111,15 @@ export function renderPreview(markdown) {
         const lvl = wordLevel(b);
         return `<h${lvl + 1} id="${esc(b.id)}" class="wl${lvl}">${inline(b.text)}</h${lvl + 1}>`;
       }
-      case 'para': return `<p>${inline(b.text)}</p>`;
+      case 'para': {
+        // A paragraph that is only an image becomes a figure, with its title as the caption (as in Word).
+        const parts = parseInline(b.text).filter((s) => s.image || s.br || s.text.trim());
+        if (parts.length === 1 && parts[0].image) {
+          const f = parts[0];
+          return `<figure class="figure">${imageTag(f)}${f.title ? `<figcaption>${esc(f.title)}</figcaption>` : ''}</figure>`;
+        }
+        return `<p>${inline(b.text)}</p>`;
+      }
       case 'list': return list(b.items);
       case 'table': return table(b);
       case 'code': return codeBlock(b.lines);
@@ -141,5 +165,18 @@ export function renderPreview(markdown) {
     out.push(block(b));
   }
 
-  return { html: out.join('\n'), headings, diagrams, title };
+  // Every image the text refers to, in order, for the Images panel.
+  const images = [];
+  const collect = (text) => { for (const s of parseInline(text)) if (s.image && s.src && !images.includes(s.src)) images.push(s.src); };
+  const walk = (list) => {
+    for (const b of list) {
+      if (b.type === 'para' || b.type === 'heading') collect(b.text);
+      else if (b.type === 'list') b.items.forEach((it) => collect(it.text));
+      else if (b.type === 'table') [b.header, ...b.rows].forEach((r) => r.forEach(collect));
+      else if (b.type === 'quote') walk(b.blocks);
+    }
+  };
+  walk(blocks);
+
+  return { html: out.join('\n'), headings, diagrams, images, title };
 }

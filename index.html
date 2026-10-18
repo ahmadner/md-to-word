@@ -25,8 +25,8 @@
         <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 17v-6"/><path d="m9.5 13.5 2.5-2.5 2.5 2.5"/>
       </svg>
       <strong>Drop a Markdown file here</strong>
-      <span>or click to choose a .md file (up to 5 MB)</span>
-      <input type="file" id="file" accept=".md,.markdown,.txt,text/markdown">
+      <span>or click to choose a .md file, a .zip with its images, or images (Markdown up to 5 MB)</span>
+      <input type="file" id="file" multiple>
     </label>
 
     <div class="start-actions">
@@ -43,6 +43,7 @@
     <li>Edit with a live preview that matches the Word layout, a formatting toolbar and an outline.</li>
     <li>A single <code># Title</code> and a two-column table under it become the cover page; <code>## Contents</code> becomes a table of contents.</li>
     <li><code>mermaid</code> code blocks become diagrams; tables, lists, code and notes are styled.</li>
+    <li>Add images of any common type, including iPhone HEIC and TIFF, edit them, and get them in Word at full resolution.</li>
     <li>Pick a theme or your own 60-30-10 colors and fonts; they apply to the preview and every export.</li>
     <li>Your latest changes are kept as a draft in this browser.</li>
   </ul>
@@ -64,15 +65,17 @@
       <button type="button" data-view="split" aria-pressed="false">Split</button>
       <button type="button" data-view="preview" aria-pressed="false">Preview</button>
     </div>
-    <button class="btn" id="openBtn" type="button" data-icon="open" title="Open a Markdown file"><span class="label">Open</span></button>
-    <input type="file" id="openFile" accept=".md,.markdown,.txt,text/markdown" hidden>
+    <button class="btn" id="openBtn" type="button" data-icon="open" title="Open a Markdown file, a .zip with images, or images"><span class="label">Open</span></button>
+    <input type="file" id="openFile" multiple hidden>
     <button class="btn" id="newBtn" type="button" data-icon="new" title="Start a blank document"><span class="label">New</span></button>
+    <button class="btn" id="imagesBtn" type="button" data-icon="images" aria-expanded="false" aria-controls="imagesPanel" title="Images in this document"><span class="label">Images</span></button>
     <button class="btn" id="themeBtn" type="button" data-icon="palette" aria-expanded="false" aria-controls="themePanel" title="Theme: colors and fonts"><span class="label">Theme</span></button>
     <div class="menu-wrap">
       <button class="btn primary" id="exportBtn" type="button" data-icon="download" aria-haspopup="menu" aria-expanded="false"><span class="label">Export</span></button>
       <div class="menu" id="exportMenu" role="menu" hidden>
         <button type="button" role="menuitem" data-export="docx">Word document<small>.docx with cover page, contents and diagrams</small></button>
         <button type="button" role="menuitem" data-export="md">Markdown<small>.md file with your edits (Ctrl+S)</small></button>
+        <button type="button" role="menuitem" data-export="zip">Markdown + images<small>.zip with the .md file and its images folder</small></button>
         <button type="button" role="menuitem" data-export="html">Web page<small>.html file that opens in any browser</small></button>
         <button type="button" role="menuitem" data-export="pdf">PDF<small>Print, then choose “Save as PDF”</small></button>
       </div>
@@ -96,6 +99,7 @@
     <button type="button" data-cmd="codeblock" data-icon="codeblock" title="Code block"></button>
     <button type="button" data-cmd="table" data-icon="table" title="Table"></button>
     <button type="button" data-cmd="diagram" data-icon="diagram" title="Diagram (Mermaid)"></button>
+    <button type="button" data-cmd="image" data-icon="image" title="Image (or paste / drop images)"></button>
   </div>
 
   <div class="panes" id="panes" data-view="split">
@@ -110,10 +114,26 @@
       <article class="doc" id="preview"></article>
     </section>
 
-    <aside class="theme-panel" id="themePanel" aria-label="Theme" hidden>
+    <aside class="side-panel" id="imagesPanel" aria-label="Images" hidden>
+      <div class="tp-head">
+        <strong>Images</strong>
+        <button type="button" class="tp-close" data-close="images" aria-label="Close images panel">×</button>
+      </div>
+      <div class="tp-body">
+        <div class="img-drop" id="imgDrop">
+          <button type="button" class="btn primary" id="imgAdd">Add images</button>
+          <span>or drop them here</span>
+          <small>JPEG, PNG, GIF, WebP, AVIF, BMP, SVG, ICO, TIFF and HEIC. Word gets every image at full resolution.</small>
+        </div>
+        <div id="imgMissing"></div>
+        <div class="img-list" id="imgList"></div>
+      </div>
+    </aside>
+
+    <aside class="side-panel" id="themePanel" aria-label="Theme" hidden>
       <div class="tp-head">
         <strong>Theme</strong>
-        <button type="button" class="tp-close" id="themeClose" aria-label="Close theme panel">×</button>
+        <button type="button" class="tp-close" data-close="theme" aria-label="Close theme panel">×</button>
       </div>
       <div class="tp-body">
         <section>
@@ -162,6 +182,103 @@
 
   <footer class="statusbar"><span id="stats"></span><span id="message">Drop a file anywhere to open it</span></footer>
 </div>
+
+<dialog class="img-editor" id="imageEditor" aria-labelledby="ieTitle">
+  <div class="ie">
+    <header class="ie-head">
+      <div class="ie-heading"><strong id="ieTitle">Edit image</strong><small id="ieInfo"></small></div>
+      <button type="button" class="tp-close" data-ie="cancel" aria-label="Close without saving">×</button>
+    </header>
+    <div class="ie-main">
+      <div class="ie-stage" id="ieStage">
+        <canvas id="ieCanvas"></canvas>
+        <div class="ie-crop" id="ieCrop" hidden>
+          <div class="ie-crop-box" id="ieCropBox"><span data-h="nw"></span><span data-h="ne"></span><span data-h="sw"></span><span data-h="se"></span></div>
+        </div>
+        <div class="ie-busy" id="ieBusy" hidden>Working…</div>
+      </div>
+      <div class="ie-side">
+        <section>
+          <h3>Rotate and flip</h3>
+          <div class="ie-tools">
+            <button type="button" class="btn" data-ie="rotl" data-icon="rotl" title="Rotate 90° to the left">Left</button>
+            <button type="button" class="btn" data-ie="rotr" data-icon="rotr" title="Rotate 90° to the right">Right</button>
+            <button type="button" class="btn" data-ie="fliph" data-icon="fliph" title="Mirror left to right">Mirror</button>
+            <button type="button" class="btn" data-ie="flipv" data-icon="flipv" title="Flip upside down">Flip</button>
+          </div>
+        </section>
+        <section>
+          <h3>Crop</h3>
+          <div class="ie-tools">
+            <button type="button" class="btn" id="ieCropBtn" data-ie="crop" data-icon="crop" aria-pressed="false">Crop</button>
+            <select id="ieAspect" aria-label="Crop shape">
+              <option value="free">Free</option>
+              <option value="orig">Original shape</option>
+              <option value="1">Square 1:1</option>
+              <option value="1.333333">4:3</option>
+              <option value="1.5">3:2</option>
+              <option value="1.777778">16:9</option>
+              <option value="0.75">3:4 portrait</option>
+              <option value="0.5625">9:16 portrait</option>
+            </select>
+            <button type="button" class="btn" id="ieUncrop" data-ie="uncrop">Remove</button>
+          </div>
+          <p class="tp-note" id="ieCropHelp" hidden>Drag the box or its corners. Click Crop again to see the result.</p>
+        </section>
+        <section>
+          <h3>Adjust</h3>
+          <label class="ie-slider"><span>Brightness</span><input type="range" min="-100" max="100" value="0" data-adjust="brightness"><output>0</output></label>
+          <label class="ie-slider"><span>Contrast</span><input type="range" min="-100" max="100" value="0" data-adjust="contrast"><output>0</output></label>
+          <label class="ie-slider"><span>Saturation</span><input type="range" min="-100" max="100" value="0" data-adjust="saturation"><output>0</output></label>
+          <label class="ie-slider"><span>Warmth</span><input type="range" min="-100" max="100" value="0" data-adjust="warmth"><output>0</output></label>
+          <label class="ie-slider"><span>Sharpen</span><input type="range" min="0" max="100" value="0" data-adjust="sharpen"><output>0</output></label>
+        </section>
+        <section>
+          <h3>Filter</h3>
+          <div class="seg ie-filter" role="group" aria-label="Filter">
+            <button type="button" data-filter="none" aria-pressed="true">None</button>
+            <button type="button" data-filter="grayscale" aria-pressed="false">Gray</button>
+            <button type="button" data-filter="sepia" aria-pressed="false">Sepia</button>
+            <button type="button" data-filter="invert" aria-pressed="false">Invert</button>
+          </div>
+        </section>
+        <section>
+          <h3>Size in pixels</h3>
+          <div class="ie-size">
+            <label>Width <input type="number" id="ieW" min="1" max="20000"></label>
+            <span aria-hidden="true">×</span>
+            <label>Height <input type="number" id="ieH" min="1" max="20000"></label>
+          </div>
+          <div class="ie-tools">
+            <label class="ie-check"><input type="checkbox" id="ieLock" checked> Keep proportions</label>
+            <button type="button" class="btn" id="ieFull" data-ie="fullsize">Full resolution</button>
+          </div>
+          <p class="tp-note">Word gets the image at this size. Full resolution keeps every pixel of the original.</p>
+        </section>
+        <section>
+          <h3>In the document</h3>
+          <label class="ie-field"><span>Description (alt text)</span><input type="text" id="ieAlt" autocomplete="off"></label>
+          <label class="ie-field"><span>Caption</span><input type="text" id="ieCaption" placeholder="Shown under the image" autocomplete="off"></label>
+          <label class="select-row"><span>Width on the page</span>
+            <select id="ieDocWidth">
+              <option value="auto">Automatic</option>
+              <option value="25">25%</option>
+              <option value="50">50%</option>
+              <option value="75">75%</option>
+              <option value="100">100%</option>
+            </select>
+          </label>
+        </section>
+      </div>
+    </div>
+    <footer class="ie-foot">
+      <button type="button" class="btn" data-ie="reset">Reset edits</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-ie="cancel">Cancel</button>
+      <button type="button" class="btn primary" data-ie="save">Save</button>
+    </footer>
+  </div>
+</dialog>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 

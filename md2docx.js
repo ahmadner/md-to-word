@@ -5,6 +5,7 @@
 //   title          title to use when the Markdown has no single "# Title"
 //   renderDiagram  async (mermaidCode) => { data: Uint8Array (PNG), width, height } in CSS pixels
 //   theme          element colors and fonts from theme.js resolveTheme(); defaults to the Navy theme
+//   loadImage      async (src) => { data, type, width, height, docWidth, fallback? } for each ![image](src)
 
 // ---------- Default theme (Navy) ----------
 const NAVY = '1F3864';
@@ -26,6 +27,7 @@ const PAGE_H = 16838;
 const MARGIN_X = 1134; // 2 cm
 const CONTENT_W = PAGE_W - 2 * MARGIN_X; // 9638
 const CONTENT_PX = Math.floor((CONTENT_W / 1440) * 96); // 642
+const MAX_IMAGE_H = 860; // tallest image or diagram that fits on a page, in px
 
 // ---------- Markdown block parser ----------
 function splitRow(line) {
@@ -156,9 +158,9 @@ export function parseInline(s, st = {}) {
       if (auto) { flush(); out.push({ ...st, link: auto[1], text: auto[1] }); i += auto[0].length; continue; }
     }
     if (c === '!' && s[i + 1] === '[') {
-      // Images are not embedded (relative paths are not available); keep the alt text visible.
-      const m = /^!\[([^\]]*)\]\(([^)]*)\)/.exec(s.slice(i));
-      if (m) { flush(); out.push({ ...st, italic: true, text: `[Image: ${m[1] || m[2].split(/[\\/]/).pop()}]` }); i += m[0].length; continue; }
+      // ![alt](src "title"); the src may be wrapped in <> when it contains spaces.
+      const m = /^!\[([^\]]*)\]\(\s*(?:<([^>]*)>|([^)\s]*))(?:\s+["']([^"']*)["'])?\s*\)/.exec(s.slice(i));
+      if (m) { flush(); out.push({ ...st, image: true, alt: m[1], src: m[2] ?? m[3], title: m[4] || '', text: m[1] }); i += m[0].length; continue; }
     }
     if (c === '[') {
       const m = /^\[([^\]]+)\]\(([^)\s]+)\)/.exec(s.slice(i));
@@ -173,7 +175,7 @@ export function parseInline(s, st = {}) {
 
 export const plain = (s) => parseInline(s).map((x) => x.text).join('');
 
-export async function markdownToDocx(markdown, { docx, title: fallbackTitle, renderDiagram, theme = {} }) {
+export async function markdownToDocx(markdown, { docx, title: fallbackTitle, renderDiagram, theme = {}, loadImage }) {
   const {
     Document, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, ShadingType,
     BorderStyle, AlignmentType, HeadingLevel, TableOfContents, Header, Footer, PageNumber,
@@ -206,6 +208,24 @@ export async function markdownToDocx(markdown, { docx, title: fallbackTitle, ren
     try { diagrams.set(code, await renderDiagram(code)); } catch (e) { diagrams.set(code, { error: String(e.message || e).split('\n')[0] }); }
   }
 
+  // Load every image the text refers to, at full resolution, before laying out the document.
+  const images = new Map();
+  const collect = (text) => { for (const sg of parseInline(text)) if (sg.image && sg.src && !images.has(sg.src)) images.set(sg.src, null); };
+  const walk = (list) => {
+    for (const b of list) {
+      if (b.type === 'para' || b.type === 'heading') collect(b.text);
+      else if (b.type === 'list') b.items.forEach((it) => collect(it.text));
+      else if (b.type === 'table') [b.header, ...b.rows].forEach((r) => r.forEach(collect));
+      else if (b.type === 'quote') walk(b.blocks);
+    }
+  };
+  walk(blocks);
+  for (const src of images.keys()) {
+    try { images.set(src, loadImage ? await loadImage(src) : null); } catch (e) { images.set(src, { error: String(e.message || e).split('\n')[0] }); }
+    const img = images.get(src);
+    if (!img || img.error) notes.push(`Image ${src} could not be added${img && img.error ? ` (${img.error})` : ''}; its description is shown instead.`);
+  }
+
   // ---------- Bookmarks for internal links (GitHub-style slugs) ----------
   const baseSlug = (t) => plain(t).trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/\s/g, '-');
   const slugCount = new Map();
@@ -225,6 +245,23 @@ export async function markdownToDocx(markdown, { docx, title: fallbackTitle, ren
   const missingLinks = new Set();
 
   // ---------- Inline -> docx runs ----------
+  // Images keep their full resolution; only the size they are shown at is fitted to the page.
+  function imageRun(seg, maxWidth = CONTENT_PX) {
+    const img = images.get(seg.src);
+    if (!img || img.error) return new TextRun({ text: `[Image: ${seg.alt || seg.src}]`, italics: true, color: T.muted });
+    let w = img.docWidth && img.docWidth !== 'auto' ? (CONTENT_PX * img.docWidth) / 100 : img.width;
+    w = Math.min(w, maxWidth);
+    let h = (w * img.height) / img.width;
+    if (h > MAX_IMAGE_H) { w = (w * MAX_IMAGE_H) / h; h = MAX_IMAGE_H; }
+    return new ImageRun({
+      type: img.type,
+      data: img.data,
+      fallback: img.fallback,
+      transformation: { width: Math.max(1, Math.round(w)), height: Math.max(1, Math.round(h)) },
+      altText: { name: seg.src.split('/').pop(), description: seg.alt || '', title: seg.title || seg.alt || '' },
+    });
+  }
+
   function runs(text, base = {}) {
     const segs = parseInline(text);
     const out = [];
@@ -232,6 +269,7 @@ export async function markdownToDocx(markdown, { docx, title: fallbackTitle, ren
     while (k < segs.length) {
       const seg = segs[k];
       if (seg.br) { out.push(new TextRun({ break: 1 })); k++; continue; }
+      if (seg.image) { out.push(imageRun(seg, base.maxImageWidth)); k++; continue; }
       const mk = (sg) => new TextRun({
         text: sg.text,
         bold: sg.bold || base.bold || undefined,
@@ -315,7 +353,7 @@ export async function markdownToDocx(markdown, { docx, title: fallbackTitle, ren
       children: [new Paragraph({
         alignment: align(b.aligns[c]),
         spacing: { before: 0, after: 0, line: 252 },
-        children: runs(text, { size: 18, bold: opts.bold, color: opts.color, noCodeFill: true }),
+        children: runs(text, { size: 18, bold: opts.bold, color: opts.color, noCodeFill: true, maxImageWidth: widths[c] / 15 - 14 }),
       })],
     });
     const headerRow = new TableRow({
@@ -419,7 +457,7 @@ export async function markdownToDocx(markdown, { docx, title: fallbackTitle, ren
     const inner = total - 220 - 200;
     const children = [];
     for (const ib of b.blocks) {
-      if (ib.type === 'para') children.push(new Paragraph({ spacing: { before: 0, after: 100 }, children: runs(ib.text) }));
+      if (ib.type === 'para') children.push(new Paragraph({ spacing: { before: 0, after: 100 }, children: runs(ib.text, { maxImageWidth: inner / 15 }) }));
       else if (ib.type === 'heading') children.push(new Paragraph({ spacing: { before: 0, after: 100 }, children: runs(ib.text, { bold: true }) }));
       else if (ib.type === 'list') children.push(...listParas(ib, true));
       else if (ib.type === 'table') { children.push(spacer(80)); children.push(buildTable(ib, inner)); children.push(spacer(60)); }
@@ -519,6 +557,17 @@ export async function markdownToDocx(markdown, { docx, title: fallbackTitle, ren
         break;
       }
       case 'para': {
+        // A paragraph that is only an image becomes a centered figure, with its title as the caption.
+        const parts = parseInline(b.text).filter((sg) => sg.image || sg.br || sg.text.trim());
+        if (parts.length === 1 && parts[0].image) {
+          const fig = parts[0];
+          body.push(new Paragraph({
+            pageBreakBefore: takeBreak(false), alignment: AlignmentType.CENTER, keepLines: true, keepNext: fig.title ? true : undefined,
+            spacing: { before: 120, after: fig.title ? 60 : 200 }, children: [imageRun(fig)],
+          }));
+          if (fig.title) body.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 0, after: 220 }, children: [new TextRun({ text: fig.title, italics: true, color: T.muted, size: 19 })] }));
+          break;
+        }
         const leadsIn = /:$/.test(b.text) || (next && ['table', 'code', 'mermaid', 'list'].includes(next.type) && b.text.length < 200);
         body.push(new Paragraph({ pageBreakBefore: takeBreak(false), keepNext: leadsIn || undefined, children: runs(b.text) }));
         break;
