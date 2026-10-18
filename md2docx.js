@@ -52,7 +52,7 @@ const isTableStart = (lines, i) => lines[i].includes('|') && i + 1 < lines.lengt
 const isBlockStart = (lines, i) => fenceRe.test(lines[i]) || headingRe.test(lines[i]) || hrRe.test(lines[i]) ||
   quoteRe.test(lines[i]) || lines[i].trim().startsWith('|') || isTableStart(lines, i);
 
-function parseBlocks(lines) {
+export function parseBlocks(lines) {
   const blocks = [];
   let i = 0;
   while (i < lines.length) {
@@ -70,7 +70,7 @@ function parseBlocks(lines) {
       continue;
     }
     if ((m = headingRe.exec(line))) {
-      blocks.push({ type: 'heading', level: m[1].length, text: m[2].trim() });
+      blocks.push({ type: 'heading', level: m[1].length, text: m[2].trim(), line: i });
       i++;
       continue;
     }
@@ -124,7 +124,7 @@ function parseBlocks(lines) {
 }
 
 // ---------- Inline parser ----------
-function parseInline(s, st = {}) {
+export function parseInline(s, st = {}) {
   const out = [];
   let buf = '';
   const flush = () => { if (buf) { out.push({ ...st, text: buf }); buf = ''; } };
@@ -170,7 +170,7 @@ function parseInline(s, st = {}) {
   return out;
 }
 
-const plain = (s) => parseInline(s).map((x) => x.text).join('');
+export const plain = (s) => parseInline(s).map((x) => x.text).join('');
 
 export async function markdownToDocx(markdown, { docx, title: fallbackTitle, renderDiagram }) {
   const {
