@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Markdown to Word</title>
+<meta name="description" content="Convert a Markdown file into a formatted Word document, with a cover page, table of contents and diagrams. Runs entirely in your browser.">
+<style>
+  :root {
+    --bg: #f4f6f9; --card: #ffffff; --text: #1f2937; --muted: #6b7280; --line: #d6dce5;
+    --accent: #1f3864; --accent-hover: #2e5c9a; --accent-soft: #e9eff7; --on-accent: #ffffff;
+    --ok: #166534; --ok-soft: #e7f5ec; --err: #b42318; --err-soft: #fdecea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161c; --card: #1b2129; --text: #e5e7eb; --muted: #9aa3af; --line: #313a46;
+      --accent: #6f9be0; --accent-hover: #8fb2ea; --accent-soft: #1f2a3a; --on-accent: #0f1520;
+      --ok: #6fcf97; --ok-soft: #16281e; --err: #f28b82; --err-soft: #2c1a1a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: start center;
+    background: var(--bg); color: var(--text);
+    font: 15px/1.5 "Segoe UI", Calibri, system-ui, sans-serif;
+  }
+  main { width: min(560px, 100% - 32px); margin: 56px 0 32px; }
+  h1 { margin: 0 0 4px; font-size: 24px; color: var(--accent); }
+  .lead { margin: 0 0 24px; color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 20px; }
+  .drop {
+    position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
+    padding: 32px 16px; border: 2px dashed var(--line); border-radius: 8px; cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .drop:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .drop svg { width: 36px; height: 36px; color: var(--accent); }
+  .drop strong { font-size: 16px; }
+  .drop span { color: var(--muted); font-size: 13px; }
+  .drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .sample { display: block; margin: 10px auto 0; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; }
+  .file { display: none; align-items: center; gap: 10px; margin-top: 14px; padding: 10px 12px; border-radius: 8px; background: var(--accent-soft); }
+  .file.show { display: flex; }
+  .file .name { font-weight: 600; overflow-wrap: anywhere; }
+  .file .size { color: var(--muted); font-size: 13px; margin-left: auto; white-space: nowrap; }
+  .convert {
+    width: 100%; margin-top: 16px; padding: 11px 16px; border: 0; border-radius: 8px; cursor: pointer;
+    background: var(--accent); color: var(--on-accent); font: inherit; font-weight: 600;
+  }
+  .convert:hover:not(:disabled) { background: var(--accent-hover); }
+  .convert:disabled { opacity: .5; cursor: not-allowed; }
+  .status { margin-top: 16px; padding: 12px 14px; border-radius: 8px; display: none; }
+  .status.show { display: block; }
+  .status.busy { background: var(--accent-soft); }
+  .status.ok { background: var(--ok-soft); color: var(--ok); }
+  .status.err { background: var(--err-soft); color: var(--err); }
+  .status pre { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.45 Consolas, monospace; max-height: 220px; overflow: auto; }
+  .status a { color: inherit; font-weight: 600; }
+  .status ul { margin: 8px 0 0; padding-left: 18px; color: var(--text); font-size: 13px; }
+  .spinner { display: inline-block; width: 14px; height: 14px; margin-right: 8px; vertical-align: -2px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .features { margin: 20px 2px 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+  .features li { margin: 2px 0; }
+  .features code { font-size: 12px; }
+  footer { margin: 16px 2px 0; color: var(--muted); font-size: 13px; }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Markdown to Word</h1>
+  <p class="lead">Turn a Markdown file into a formatted Word document. The conversion runs in your browser, so your file is never uploaded.</p>
+
+  <div class="card">
+    <label class="drop" id="drop">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 17v-6"/><path d="m9.5 13.5 2.5-2.5 2.5 2.5"/>
+      </svg>
+      <strong>Drop a Markdown file here</strong>
+      <span>or click to choose a .md file (up to 5 MB)</span>
+      <input type="file" id="file" accept=".md,.markdown,.txt,text/markdown">
+    </label>
+    <button class="sample" id="sample" type="button">or try it with a sample file</button>
+
+    <div class="file" id="picked">
+      <span class="name" id="pickedName"></span>
+      <span class="size" id="pickedSize"></span>
+    </div>
+
+    <button class="convert" id="convert" type="button" disabled>Convert to Word</button>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+  </div>
+
+  <ul class="features">
+    <li>A single <code># Title</code> and a two-column table under it become the cover page.</li>
+    <li>A <code>## Contents</code> section becomes a Word table of contents.</li>
+    <li><code>mermaid</code> code blocks become diagrams; tables, lists, code and notes are styled.</li>
+    <li>Links to <code>#section</code> anchors become clickable cross-references.</li>
+  </ul>
+
+  <footer>
+    Built with <a href="https://docx.js.org/">docx</a> and <a href="https://mermaid.js.org/">Mermaid</a>.
+    <a id="source" hidden>Source on GitHub</a>
+  </footer>
+</main>
+
+<script src="vendor/docx.iife.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
